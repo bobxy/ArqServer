@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.Socket;
 import java.util.Scanner;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static jdk.nashorn.internal.objects.NativeMath.min;
 
@@ -16,11 +17,11 @@ import static jdk.nashorn.internal.objects.NativeMath.min;
  * f- Continue the process until all packets have been sent.
  */
 public class GBNClient {
-    static int lastAck = 0;
+    static AtomicInteger lastAck = new AtomicInteger(0);
 
 
     public static void setLastAck(int lastAck) {
-        GBNClient.lastAck = lastAck;
+        GBNClient.lastAck.set(lastAck);
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -32,9 +33,13 @@ public class GBNClient {
         ackListenerThread.start();
         Scanner scr = new Scanner(System.in);
         //read user input
+        System.out.println("pls enter num of packet");
         int noPackets = scr.nextInt();
+        System.out.println("pls enter prob error");
         int probError = scr.nextInt();
+        System.out.println("pls enter window size");
         int wSize = scr.nextInt();
+        System.out.println("pls enter time out");
         int timeOut = scr.nextInt();
 
         long timer[] = new long[wSize];
@@ -42,7 +47,7 @@ public class GBNClient {
 
         writer.write(noPackets);
         writer.write(probError);
-        System.out.println("Number of packet is " + noPackets);
+        //System.out.println("Number of packet is " + noPackets);
         //Q: at least
         //if the server reply with ack, then the window size increase
         int sent = 1;
@@ -59,21 +64,31 @@ public class GBNClient {
             //}
 
         }*/
-        while (sent < noPackets){
-            if(sent - lastAck <= wSize){
-                timer[(sent-1)%wSize] = System.currentTimeMillis();
+        long firstTime = System.currentTimeMillis();
+        while (sent <= noPackets) {
+            if (sent - lastAck.get() <= wSize) {
+                timer[(sent - 1) % wSize] = System.currentTimeMillis();
                 writer.write(sent);
+                System.out.println("sent: " + sent);
                 sent++;
             }
             long currentTime = System.currentTimeMillis();
-            if(currentTime - timer[lastAck%wSize] > timeOut){//sent - 1 is lastAck
-                writer.write(lastAck+1);
+            if (currentTime - timer[lastAck.get() % wSize] > timeOut) {//sent - 1 is lastAck
+                int resent = lastAck.get() + 1;
+                writer.write(resent);
+                timer[(resent-1) % wSize] = System.currentTimeMillis();
+                System.out.println("resent: " + resent);
             }
         }
-        while (true){
-            if(lastAck == noPackets){
+
+        while (true) {
+            //System.out.println("last ack:"+ lastAck);
+            if (!ackListenerThread.isAlive()) {
+
+                long lastTime = System.currentTimeMillis();
+                System.out.println("The total time take is: " + (lastTime - firstTime));
                 socket.close();
-                ackListenerThread.join();
+                return;
             }
         }
 
@@ -95,7 +110,12 @@ class AckListenerThread extends Thread {
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             while (!socket.isClosed()) {
                 int ack = bufferedReader.read();
-                GBNClient.setLastAck(ack);
+                if (ack != -1) {
+                    GBNClient.setLastAck(ack);
+                    System.out.println("ack recieved: " + ack);
+                } else {
+                    break;
+                }
             }
 
         } catch (IOException e) {
