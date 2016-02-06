@@ -17,21 +17,25 @@ import java.util.Scanner;
 public class SAWClient {
     public static void main(String[] args) throws IOException {
 
-        Socket socket = new Socket("localhost", 9876);
+        Socket socket = new Socket(args[0], Integer.parseInt(args[1]));
         BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         DataOutputStream writer = new DataOutputStream(socket.getOutputStream());
 
         Scanner scr = new Scanner(System.in);
         int noPackets = scr.nextInt();
+        writer.writeBytes(noPackets+"\r\n");
+        System.out.println("Number of packet is " + noPackets);
         int packet;
 
         for(packet=1;packet<=noPackets;packet++)
         {
-            writer.write(packet);
+            writer.writeBytes(packet+"\r\n");
             String temp;
             temp=reader.readLine();
+            System.out.println("recieved: "+temp);
             while(Integer.parseInt(temp)!=packet) {
                 temp=reader.readLine();
+                System.out.println("recieved retry: "+temp);
             }
 
         }
