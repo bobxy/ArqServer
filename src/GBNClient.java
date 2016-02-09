@@ -24,6 +24,10 @@ public class GBNClient {
         GBNClient.lastAck.set(lastAck);
     }
 
+    public static int getLastAck(){
+        return lastAck.get();
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException {
 
         Socket socket = new Socket(args[0], Integer.parseInt(args[1]));
@@ -65,19 +69,21 @@ public class GBNClient {
 
         }*/
         long firstTime = System.currentTimeMillis();
-        while (sent <= noPackets) {
-            if (sent - lastAck.get() <= wSize) {
+        while (lastAck.get() < noPackets) {
+            long currentTime = System.currentTimeMillis();
+            if (currentTime - timer[lastAck.get() % wSize] > timeOut) {//sent - 1 is lastAck
+                //time out
+                int resent = lastAck.get() + 1;
+                //writer.write(resent);
+                //timer[(resent-1) % wSize] = System.currentTimeMillis();
+                sent = resent;
+                System.out.println("resending whole window...");
+            }
+            if (sent - lastAck.get() <= wSize && sent <= noPackets) {
                 timer[(sent - 1) % wSize] = System.currentTimeMillis();
                 writer.write(sent);
                 System.out.println("sent: " + sent);
                 sent++;
-            }
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - timer[lastAck.get() % wSize] > timeOut) {//sent - 1 is lastAck
-                int resent = lastAck.get() + 1;
-                writer.write(resent);
-                timer[(resent-1) % wSize] = System.currentTimeMillis();
-                System.out.println("resent: " + resent);
             }
         }
 
@@ -110,6 +116,10 @@ class AckListenerThread extends Thread {
             BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             while (!socket.isClosed()) {
                 int ack = bufferedReader.read();
+                if(ack != -1 && ack <= GBNClient.getLastAck()){
+                    System.out.println("drop acknowledgement: "+ack);
+                    continue;
+                }
                 if (ack != -1) {
                     GBNClient.setLastAck(ack);
                     System.out.println("ack recieved: " + ack);
